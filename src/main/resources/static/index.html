@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Zip File Compressor</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+
+    .container {
+      background: #fff;
+      padding: 2rem;
+      border-radius: 10px;
+      width: 400px;
+      box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+      text-align: center;
+    }
+
+    #drop-area {
+      border: 2px dashed #007bff;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .file-list {
+      max-height: 100px;
+      overflow-y: auto;
+      font-size: 0.9rem;
+      text-align: left;
+      margin-bottom: 1rem;
+    }
+
+    .progress {
+      width: 100%;
+      height: 20px;
+      background-color: #e0e0e0;
+      border-radius: 5px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background-color: #28a745;
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    button {
+      padding: 0.6rem 1.2rem;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    #status {
+      margin-top: 1rem;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>ZIP File Compressor</h2>
+
+    <div id="drop-area" onclick="document.getElementById('fileInput').click()">
+      Click or Drag files here
+      <input type="file" id="fileInput" multiple style="display: none;">
+    </div>
+
+    <ul class="file-list" id="fileList"></ul>
+
+    <div class="progress">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <button onclick="uploadFiles()">Compress & Download</button>
+
+    <p id="status"></p>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const fileList = document.getElementById("fileList");
+    const progressBar = document.getElementById("progressBar");
+    const status = document.getElementById("status");
+
+    let selectedFiles = [];
+
+    fileInput.addEventListener("change", () => {
+      selectedFiles = Array.from(fileInput.files);
+      updateFileList();
+    });
+
+    document.getElementById("drop-area").addEventListener("dragover", e => {
+      e.preventDefault();
+    });
+
+    document.getElementById("drop-area").addEventListener("drop", e => {
+      e.preventDefault();
+      selectedFiles = Array.from(e.dataTransfer.files);
+      updateFileList();
+    });
+
+    function updateFileList() {
+      fileList.innerHTML = "";
+      selectedFiles.forEach(file => {
+        const li = document.createElement("li");
+        li.textContent = file.name;
+        fileList.appendChild(li);
+      });
+    }
+
+    function uploadFiles() {
+      if (selectedFiles.length === 0) {
+        alert("Please select files to upload.");
+        return;
+      }
+
+      const formData = new FormData();
+      selectedFiles.forEach(file => formData.append("files", file));
+
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/zip/compress", true);
+      xhr.responseType = "blob";
+
+      xhr.upload.onprogress = function (event) {
+        if (event.lengthComputable) {
+          const percent = (event.loaded / event.total) * 100;
+          progressBar.style.width = percent.toFixed(1) + "%";
+        }
+      };
+
+      xhr.onloadstart = function () {
+        progressBar.style.width = "0%";
+        status.textContent = "Uploading...";
+      };
+
+      xhr.onload = function () {
+        if (xhr.status === 200) {
+          const blob = xhr.response;
+          const url = window.URL.createObjectURL(blob);
+
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "compressed.zip";
+          a.click();
+          window.URL.revokeObjectURL(url);
+
+          progressBar.style.width = "100%";
+          status.textContent = "Download started!";
+        } else {
+          status.textContent = "Error: Upload failed.";
+        }
+      };
+
+      xhr.onerror = function () {
+        status.textContent = "Network Error!";
+      };
+
+      xhr.send(formData);
+    }
+  </script>
+</body>
+</html>
