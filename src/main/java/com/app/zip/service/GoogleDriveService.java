@@ -1,71 +1,52 @@
 package com.app.zip.service;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Collections;
-import java.util.List;
 
 import org.springframework.stereotype.Service;
 
-import com.google.api.client.auth.oauth2.Credential;
-import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp;
-import com.google.api.client.extensions.jetty.auth.oauth2.LocalServerReceiver;
-import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
-import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets;
-import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.FileContent;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.gson.GsonFactory;
-import com.google.api.client.util.store.FileDataStoreFactory;
 import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
+import com.google.auth.http.HttpCredentialsAdapter;
+import com.google.auth.oauth2.GoogleCredentials;
 
 @Service
 public class GoogleDriveService {
 
     private static final String APPLICATION_NAME = "ZipUploaderClient";
     private static final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
-    private static final List<String> SCOPES = Collections.singletonList(DriveScopes.DRIVE_FILE);
-    private static final String TOKENS_DIRECTORY_PATH = "tokens";
+    private static final String SCOPES = DriveScopes.DRIVE_FILE;
 
     private Drive driveService;
 
     public GoogleDriveService() {
-        // Do NOT initialize Drive in constructor to avoid OAuth prompt at app start
+        // Drive will be initialized lazily
     }
 
     private Drive getDriveService() throws IOException, GeneralSecurityException {
         if (driveService != null) return driveService;
 
-//        InputStream in = getClass().getResourceAsStream("/credentials.json");
-        InputStream in = new ByteArrayInputStream(System.getenv("SERVICE_ACCOUNT_JSON").getBytes());
+        // Load service account JSON from environment variable
+        String saJson = System.getenv("SERVICE_ACCOUNT_JSON");
+        if (saJson == null || saJson.isEmpty()) {
+            throw new IllegalStateException("Environment variable SERVICE_ACCOUNT_JSON is not set");
+        }
 
-        if (in == null) throw new FileNotFoundException("Resource not found: credentials.json");
+        GoogleCredentials credentials = GoogleCredentials.fromStream(
+                        new ByteArrayInputStream(saJson.getBytes()))
+                .createScoped(Collections.singleton(DriveScopes.DRIVE_FILE));
 
-        GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(JSON_FACTORY, new InputStreamReader(in));
-        var httpTransport = GoogleNetHttpTransport.newTrustedTransport();
-
-        GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
-                httpTransport, JSON_FACTORY, clientSecrets, SCOPES)
-                .setDataStoreFactory(new FileDataStoreFactory(new File(TOKENS_DIRECTORY_PATH)))
-                .setAccessType("offline")
-                .build();
-
-        // Local server receiver for OAuth callback
-//        LocalServerReceiver receiver = new LocalServerReceiver.Builder()
-//                .setPort(8888) // or any free port
-//                .setCallbackPath("/oauth2callback")
-//                .build();
-
-        LocalServerReceiver receiver = new LocalServerReceiver.Builder()
-                .setHost("zipuploader.vercel.app")
-                .setPort(-1)
-                .setCallbackPath("/oauth2callback")
-                .build();
-
-        Credential credential = new AuthorizationCodeInstalledApp(flow, receiver).authorize("user");
-
-        driveService = new Drive.Builder(httpTransport, JSON_FACTORY, credential)
+        driveService = new Drive.Builder(
+                com.google.api.client.googleapis.javanet.GoogleNetHttpTransport.newTrustedTransport(),
+                JSON_FACTORY,
+                new HttpCredentialsAdapter(credentials))
                 .setApplicationName(APPLICATION_NAME)
                 .build();
 
@@ -75,15 +56,11 @@ public class GoogleDriveService {
     public String uploadFile(File localFile) throws IOException, GeneralSecurityException {
         Drive drive = getDriveService();
 
-        // Google Drive file metadata
-        com.google.api.services.drive.model.File fileMetadata =
-                new com.google.api.services.drive.model.File();
+        com.google.api.services.drive.model.File fileMetadata = new com.google.api.services.drive.model.File();
         fileMetadata.setName(localFile.getName());
 
-        // File content
         FileContent mediaContent = new FileContent("application/zip", localFile);
 
-        // Upload
         com.google.api.services.drive.model.File uploadedFile = drive.files()
                 .create(fileMetadata, mediaContent)
                 .setFields("id, name, webViewLink")
