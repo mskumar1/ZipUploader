@@ -1,14 +1,13 @@
 package com.app.zip.service;
 
 import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Collections;
 
 import org.springframework.stereotype.Service;
 
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.FileContent;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.gson.GsonFactory;
@@ -22,7 +21,6 @@ public class GoogleDriveService {
 
     private static final String APPLICATION_NAME = "ZipUploaderClient";
     private static final JsonFactory JSON_FACTORY = GsonFactory.getDefaultInstance();
-    private static final String SCOPES = DriveScopes.DRIVE_FILE;
 
     private Drive driveService;
 
@@ -44,7 +42,7 @@ public class GoogleDriveService {
                 .createScoped(Collections.singleton(DriveScopes.DRIVE_FILE));
 
         driveService = new Drive.Builder(
-                com.google.api.client.googleapis.javanet.GoogleNetHttpTransport.newTrustedTransport(),
+                GoogleNetHttpTransport.newTrustedTransport(),
                 JSON_FACTORY,
                 new HttpCredentialsAdapter(credentials))
                 .setApplicationName(APPLICATION_NAME)
@@ -53,9 +51,10 @@ public class GoogleDriveService {
         return driveService;
     }
 
-    public String uploadFile(File localFile) throws IOException, GeneralSecurityException {
+    public String uploadFile(java.io.File localFile) throws IOException, GeneralSecurityException {
         Drive drive = getDriveService();
 
+        // Use fully qualified name to avoid conflict
         com.google.api.services.drive.model.File fileMetadata = new com.google.api.services.drive.model.File();
         fileMetadata.setName(localFile.getName());
 
